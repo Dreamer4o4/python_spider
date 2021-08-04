@@ -18,7 +18,7 @@ day = ["3y", "5y", "all"]
 
 
 #   获取所有指数的代码
-def get_index_fund_info():
+def get_index_fund_code():
     url = "https://danjuanapp.com/djapi/index_eva/dj"
 
     headers = {
@@ -89,8 +89,8 @@ def analysis_data(data):
 
 
 if __name__ == "__main__":
-    index_info = get_index_fund_info()
-    print(index_info)
+    index_info = get_index_fund_code()
+    # print(index_info)
 
     for idx in index_info.index:
         info = index_info.loc[idx].values
@@ -99,5 +99,3 @@ if __name__ == "__main__":
         if analysis_data(data):
             print(info[1])
 
-    # data, lines = get_index_fund_data('SPACEVCP')
-    # analysis_data(data)
