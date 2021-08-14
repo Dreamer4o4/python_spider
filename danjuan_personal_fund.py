@@ -39,7 +39,7 @@ def get_one_page_personal_fund_code(page_index):
 
 
 #   获取所有私人基金组合代码
-def get_personal_fund_code(pages=1):
+def get_personal_fund_code(pages=3):
     personal_fund_code_list = []
 
     if pages < 1:
@@ -71,7 +71,7 @@ def get_personal_fund_info(code):
 
     fund_basic_info = json.loads(html.text)["data"]
 
-    if int(fund_basic_info["found_days"]) < 365 : 
+    if int(fund_basic_info["found_days"]) < 365:
         return 0, 0
 
     # 返回年化收益、近1年收益
@@ -107,16 +107,10 @@ def get_adjust_plan(code):
 
 
 def parase_adjust_plan(fund_adjust_info):
-    info = "fund code \t: " + fund_adjust_info["plan_code"] + "\r\n"
+    info = ""
 
-    timestamp = int(fund_adjust_info["trade_date"]) / 1000
-    info += (
-        "time \t\t: " + time.strftime("%Y-%m-%d", time.localtime(timestamp)) + "\r\n"
-    )
-
-    info += "explain \t: " + fund_adjust_info["remark"] + "\r\n"
     for item in fund_adjust_info["trading_elements"]:
-        info += (
+        cur_item_info = (
             item["fd_code"]
             + "|"
             + item["fd_name"]
@@ -124,12 +118,24 @@ def parase_adjust_plan(fund_adjust_info):
             + item["last_percent"]
             + "% -> "
             + item["percent"]
-            + "%\r\n"
+            + "%\n"
         )
+        if item["last_percent"] > item["percent"]:
+            info = info + cur_item_info
+        else:
+            info = cur_item_info + info
+
+    info = "explain \t: " + fund_adjust_info["remark"] + "\n" + info
+    timestamp = int(fund_adjust_info["trade_date"]) / 1000
+    info = (
+        "time \t\t: " + time.strftime("%Y-%m-%d", time.localtime(timestamp)) + "\n"
+    ) + info
+    info = "fund code \t: " + fund_adjust_info["plan_code"] + "\n" + info
 
     return info
 
-def check_one_fund(index, index_info):
+
+def check_one_fund(index, index_info, days=10):
     code = index_info.loc[index].values[0]
     name = index_info.loc[index].values[1]
     # print("cur code : ", code, " ", name)
@@ -137,12 +143,13 @@ def check_one_fund(index, index_info):
     if analysis_data(annualized_income, one_year_income):
         fund_adjust_info = get_adjust_plan(code)
 
-        if int(fund_adjust_info["trade_date"]) == (
-            int(time.mktime(datetime.date.today().timetuple())) * 1000
+        if (
+            int(fund_adjust_info["trade_date"])
+            >= (time.time() - days * 24 * 60 * 60) * 1000
         ):
-            return parase_adjust_plan(fund_adjust_info)
-    # else :
-    #     print("no worth to reference")
+            parase_data = "fund name \t: " + name + "\n"
+            parase_data += parase_adjust_plan(fund_adjust_info)
+            return parase_data
     return ""
 
 
@@ -150,9 +157,12 @@ index_info = []
 cur_idx = -1
 res = ""
 threadLock = threading.Lock()
-class MyThread (threading.Thread):
-    def __init__(self):
+
+class MyThread(threading.Thread):
+    def __init__(self, past_days=10):
         threading.Thread.__init__(self)
+        self.past_days = past_days
+
     def run(self):
         global index_info, cur_idx, res
         while True:
@@ -162,30 +172,28 @@ class MyThread (threading.Thread):
             if cur_idx >= len(index_info):
                 break
 
-            cur_res = check_one_fund(cur_idx, index_info)
+            cur_res = check_one_fund(cur_idx, index_info, self.past_days)
             if cur_res != "":
-                res += "\r\n" + cur_res
+                res += "\n" + cur_res
 
 
 if __name__ == "__main__":
-    index_info = get_personal_fund_code()
+    index_info = get_personal_fund_code(pages=3)
     # print(index_info)
 
     # for index in index_info.index:
     #     print(check_one_fund(index, index_info))
-    
-    
+
     thread_num = 8
     thread_list = []
     for idx in range(thread_num):
-        cur_thread = MyThread()
+        cur_thread = MyThread(past_days=10)
         cur_thread.start()
         thread_list.append(cur_thread)
 
     for cur_thread in thread_list:
         cur_thread.join()
-    
-    # print (res)
-    file = open("./out.txt", 'w')
-    file.write(res)
 
+    # print (res)
+    file = open("./out.txt", "w", encoding="utf-8")
+    file.write(res)
